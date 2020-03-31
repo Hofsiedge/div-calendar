@@ -26,7 +26,7 @@ DEBUG = os.environ.get('DEBUG', None) == 'True'
 
 ALLOWED_HOSTS = [
     '0.0.0.0',
-    'https://div-calendar.herokuapp.com',
+    'div-calendar.herokuapp.com',
 ]
 
 
