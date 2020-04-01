@@ -25,7 +25,7 @@ def search_web(request):
             # return JsonResponse(result, safe=False, json_dumps_params={'ensure_ascii': False})
 
             return JsonResponse([{
-                "ticket": "SBER",
+                "ticker": "SBER",
                 "name": "Сбербанк ао",
                 "type": "stock",
                 "logo": "https://s3-symbol-logo.tradingview.com/sberbank--big.svg",

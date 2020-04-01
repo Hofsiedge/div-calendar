@@ -9,11 +9,10 @@ def parse_moex(query: str, limit: int) -> pd.DataFrame:
         return None
     columns = r.json()['securities']['columns']
     data = r.json()['securities']['data']
-    mapping = {'secid': 'ticket', 'name': 'name', 'type': 'type'}
     df = pd.DataFrame(columns=columns, data=data)
     df = df[['secid', 'name', 'type']][df.type.str.match(r".*(share|bond)")].reset_index(drop=True)
     df = df[:limit]
-    df.rename(columns={'secid': 'ticket'}, inplace=True)
+    df.rename(columns={'secid': 'ticker'}, inplace=True)
     df = df[df.ticket.str.contains(query, case=False)
             | df.name.str.contains(query, case=False)].reset_index(drop=True)
     df.type = df.type.apply(lambda x: x.split('_')[-1])
