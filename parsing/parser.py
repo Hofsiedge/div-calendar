@@ -15,6 +15,8 @@ def parse_moex(query: str, limit: int) -> pd.DataFrame:
     df = df[:limit]
     df.rename(columns={'secid': 'ticket'}, inplace=True)
     df.type = df.type.map({'common_share': 'stock', 'preferred_share': 'stock', 'exchange_bond': 'bond'})
+    df = df[df.ticket.str.contains(query, case=False)
+            | df.name.str.contains(query, case=False)].reset_index(drop=True)
     return df
 
 
