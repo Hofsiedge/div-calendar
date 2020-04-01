@@ -14,9 +14,10 @@ def parse_moex(query: str, limit: int) -> pd.DataFrame:
     df = df[['secid', 'name', 'type']][df.type.str.match(r".*(share|bond)")].reset_index(drop=True)
     df = df[:limit]
     df.rename(columns={'secid': 'ticket'}, inplace=True)
-    df.type = df.type.map({'common_share': 'stock', 'preferred_share': 'stock', 'exchange_bond': 'bond'})
     df = df[df.ticket.str.contains(query, case=False)
             | df.name.str.contains(query, case=False)].reset_index(drop=True)
+    df.type = df.type.apply(lambda x: x.split('_')[-1])
+    df.fillna(value="", inplace=True)
     return df
 
 
