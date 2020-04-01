@@ -1,4 +1,7 @@
 .venv/
 __pycache__/
+delme/
+*.delme
+delme.*
 *.pyc
 *.swp
