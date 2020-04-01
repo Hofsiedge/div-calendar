@@ -6,9 +6,20 @@ def get_posts(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
+            if not {'limit', 'offset', 'securities'} <= data.keys():
+                raise KeyError(f"Missing arguments")
+
             limit = int(data['limit'])
             offset = int(data['offset'])
             securities = data['securities']
+            if type(limit) != int or type(offset) != int\
+            or not securities or type(securities) != list:
+                raise TypeError("Incorrect argument format")
+
+            for i in securities:
+                if type(i) != str:
+                    raise TypeError("Incorrect argument format")
+
             return JsonResponse([{
                     "title": "Заголовок",
                     "text": "Основной текст новости",
@@ -17,10 +28,10 @@ def get_posts(request):
                     "source": "БКС Экспресс",
                     "link": "https://bcs-express.ru/novosti-i-analitika/2020429427-koronovirus-b-et-po-severstali",
             }] * limit, safe=False, json_dumps_params={'ensure_ascii': False})
-        except:
+        except (TypeError, KeyError) as e:
             return JsonResponse({
                 'status': 'false',
-                'message': 'Incorrect input format'
+                'message': str(e),
             }, status=400)
     return JsonResponse({
         'status': 'false',
