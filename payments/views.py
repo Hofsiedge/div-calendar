@@ -1,9 +1,9 @@
+import json, re
 from django.shortcuts import render
 from django.http import JsonResponse
-import json
-import re
+from parsing import fetch_payments
 
-date_pattern = re.compile(r'^(\d{2}-){2}\d{4}$')
+date_pattern = re.compile(r'^\d{4}(-\d{2}){2}$')
 
 def get_payments(request):
     if request.method == 'POST':
@@ -23,6 +23,10 @@ def get_payments(request):
                 if type(i) != str:
                     raise TypeError("Incorrect argument format")
 
+            result = fetch_payments(securities, start_date, end_date)
+            return JsonResponse(result, safe=False, json_dumps_params={'ensure_ascii': False})
+
+            """
             return JsonResponse([{
                 "date": "2020-03-09",
                 "count": 10,
@@ -30,6 +34,7 @@ def get_payments(request):
                 "name": "НЛМК",
                 "logo": "https://s3-symbol-logo.tradingview.com/sberbank--big.svg",
             }] * 20, safe=False, json_dumps_params={'ensure_ascii': False})
+            """
 
         except (TypeError, KeyError) as e:
             return JsonResponse({
