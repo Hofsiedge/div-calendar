@@ -18,12 +18,13 @@ def search_web(request):
 
             if type(limit) != int or limit < 1 \
             or type(q) != str or _type not in {'stock', 'bond'} \
-            or market not in {'russian', 'foreign'}:
+            or market not in {'russian', 'foreign', 'all'}:
                 raise TypeError("Incorrect argument format")
 
-            # result = search(request.GET.get('q', ''), int(request.GET.get('limit', 50)))
-            # return JsonResponse(result, safe=False, json_dumps_params={'ensure_ascii': False})
+            result = search(q, _type, 0, limit, market)
+            return JsonResponse(result, safe=False, json_dumps_params={'ensure_ascii': False})
 
+            """
             return JsonResponse([{
                 "ticker": "SBER",
                 "name": "Сбербанк ао",
@@ -33,6 +34,7 @@ def search_web(request):
                 "income": 537.3,
                 "exchange": "ММВБ",
             }] * limit, safe=False, json_dumps_params={'ensure_ascii': False})
+            """
 
         except (TypeError, KeyError) as e:
             return JsonResponse(
