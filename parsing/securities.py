@@ -50,7 +50,7 @@ def search_tinkoff(query: str, type: str, offset: int, limit: int, market: str) 
         exchanges.append(symbol['exchange'])
         logos.append(f'https://static.tinkoff.ru/brands/traiding/{symbol["logoName"]}')
         prices.append(i['price']['value'])
-        yields.append(i.get('totalYield', ''))
+        yields.append(i.get('totalYield', 0))
 
     # TODO: yields for stocks
     # r = requests.post("https://api.tinkoff.ru/trading/bonds/get",
@@ -68,7 +68,7 @@ def search_tinkoff(query: str, type: str, offset: int, limit: int, market: str) 
     return df
 
 
-def search(query: str, type: str, offset: int, limit: int, market: str):
+def search_securities(query: str, type: str, offset: int, limit: int, market: str):
     res = search_tinkoff(query, type, offset, limit, market)
     if res is None:
         return None

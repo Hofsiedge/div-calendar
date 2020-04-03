@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.http import JsonResponse
-from parsing import search
+from parsing import search_securities
 
 def search_web(request):
     if request.method == 'GET':
@@ -21,7 +21,7 @@ def search_web(request):
             or market not in {'russian', 'foreign', 'all'}:
                 raise TypeError("Incorrect argument format")
 
-            result = search(q, _type, 0, limit, market)
+            result = search_securities(q, _type, 0, limit, market)
             return JsonResponse(result, safe=False, json_dumps_params={'ensure_ascii': False})
 
             """
