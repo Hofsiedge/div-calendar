@@ -1,6 +1,7 @@
+import json
 from django.shortcuts import render
 from django.http import JsonResponse
-import json
+from parsing import search_posts
 
 def get_posts(request):
     if request.method == 'POST':
@@ -20,6 +21,9 @@ def get_posts(request):
                 if type(i) != str:
                     raise TypeError("Incorrect argument format")
 
+            result = search_posts(securities, offset, limit)
+            return JsonResponse(result, safe=False, json_dumps_params={'ensure_ascii': False})
+            """
             return JsonResponse([{
                     "title": "Заголовок",
                     "text": "Основной текст новости",
@@ -28,6 +32,7 @@ def get_posts(request):
                     "source": "БКС Экспресс",
                     "link": "https://bcs-express.ru/novosti-i-analitika/2020429427-koronovirus-b-et-po-severstali",
             }] * limit, safe=False, json_dumps_params={'ensure_ascii': False})
+            """
         except (TypeError, KeyError) as e:
             return JsonResponse({
                 'status': 'false',
