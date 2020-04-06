@@ -31,9 +31,10 @@ def search_rbc(ticker: str, offset: int, limit: int):
     df.poster.fillna('', inplace=True)
     df.source.fillna('РБК', inplace=True)
 
-    return df
+    return df[offset:limit]
 
 
+# TODO: caching
 def search_posts(securities: list, offset: int, limit: int):
     data = []
     for security in securities:
