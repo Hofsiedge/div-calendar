@@ -97,11 +97,12 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
         return None
 
     if type == 'stock':
-        loop = asyncio.get_event_loop()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         coroutine = fetch_yield_fs if market.lower() == 'foreign' else fetch_yield_rs
         yields = loop.run_until_complete(tickers_map(res.ticker, coroutine))
-        # loop.run_until_complete(asyncio.sleep(0))
-        # loop.close()
+        loop.run_until_complete(asyncio.sleep(0))
+        loop.close()
         res['yield'] = yields
 
-    return res# .to_dict(orient='records')
+    return res.to_dict(orient='records')
