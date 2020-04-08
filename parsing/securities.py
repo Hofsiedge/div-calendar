@@ -1,35 +1,41 @@
-import requests
+import requests, aiohttp, asyncio
 import pandas as pd
 from security.models import Security
+from bs4 import BeautifulSoup
 
-LIMIT = 100
 
-"""
-def parse_single_tradingview(ticker: str) -> pd.DataFrame:
-    df = pd.DataFrame(columns=columns, data=data)
-    df = df[['secid', 'name', 'type']][df.type.str.match(r'.*(share|bond)')].reset_index(drop=True)
-    df = df[:limit]
-    df.rename(columns={'secid': 'ticker'}, inplace=True)
-    df = df[df.ticket.str.contains(query, case=False)
-            | df.name.str.contains(query, case=False)].reset_index(drop=True)
-    df.type = df.type.apply(lambda x: x.split('_')[-1])
-    df.fillna(value='', inplace=True)
-    return df
-"""
+async def fetch_yield_rs(session: aiohttp.ClientSession, ticker: str):
+    async with session.get(f'https://www.dohod.ru/ik/analytics/dividend/{ticker.lower()}') as r:
+        if r.status != 200:
+            return 0
+        text = await r.text()
+        soup = BeautifulSoup(text, 'html.parser')
+        try:
+            return float(soup.find('tr', {'class': 'frow'}).find('td').text[:-1])
+        except Exception as e:
+            print(e)
+            return 0
 
-def fetch_yield_rus_stock(ticker: str):
-    r = requests.get('https://www.dohod.ru/ik/analytics/dividend/{ticker.lower()}')
-    if r.status != 200:
-        return 0
-    soup = BeautifulSoup(r.text)
-    return float(soup.find('tr', {'class': 'frow'}).find('td').text[:-1])
 
-def fetch_yield_foreign_stock(ticker: str):
-    r = requests.get(f'https://www.streetinsider.com/dividend_history.php?q={ticker}')
-    if r.status_code != 200:
-        return 0
-    soup = BeautifulSoup(r.text)
-    soup.find('div', {'class': 'dividend-info'}).findAll('strong')
+async def fetch_yield_fs(session: aiohttp.ClientSession, ticker: str):
+    async with session.get(f'https://ycharts.com/companies/{ticker.upper()}/dividend_yield') as r:
+        if r.status != 200:
+            return 0
+        text = await r.text()
+        soup = BeautifulSoup(text, 'html.parser')
+        try:
+            return float(soup.find('span', {'id': 'pgNameVal'}).text.split()[0][:-1])
+        except Exception as e:
+            print(e)
+            return 0
+
+
+async def tickers_map(tickers, coroutine):
+    conn = aiohttp.TCPConnector(limit=20)
+    timeout = aiohttp.ClientTimeout(total=7)
+    async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
+        futures = [coroutine(session, ticker) for ticker in tickers]
+        return await asyncio.gather(*futures)
 
 
 def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
@@ -49,8 +55,7 @@ def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
             'end': (offset or 0) + (limit or 100),
         }
     )
-    # price, symbol.ticker, symbol.symbolType, symbol.currency,
-    # symbol.showName, symbol.exchange, symbol.logoName, 
+
     if r.status_code != 200:
         return None
     data = r.json()['payload']['values']
@@ -69,7 +74,6 @@ def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
         prices.append(i['price']['value'])
         yields.append(i.get('totalYield', 0))
 
-    # TODO: yields for stocks
 
     df.ticker   = tickers
     df.name     = names
@@ -91,4 +95,13 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
     res = search_tinkoff(query, type, offset, limit, market, currency)
     if res is None:
         return None
-    return res.to_dict(orient='records')
+
+    if type == 'stock':
+        loop = asyncio.get_event_loop()
+        coroutine = fetch_yield_fs if market.lower() == 'foreign' else fetch_yield_rs
+        yields = loop.run_until_complete(tickers_map(res.ticker, coroutine))
+        # loop.run_until_complete(asyncio.sleep(0))
+        # loop.close()
+        res['yield'] = yields
+
+    return res# .to_dict(orient='records')

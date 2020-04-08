@@ -5,7 +5,7 @@ from parsing import search_securities
 def search_web(request):
     if request.method == 'GET':
         try:
-            if not {'q', 'type'} <= request.GET.keys():
+            if not {'q', 'type', 'market'} <= request.GET.keys():
                 raise KeyError("Missing arguments")
 
             try:
@@ -14,11 +14,11 @@ def search_web(request):
                 raise TypeError("Incorrect argument format")
             q = request.GET['q']
             _type = request.GET['type']
-            market = request.GET.get('market', 'all')
+            market = request.GET['market']
 
             if limit is not None and (type(limit) != int or limit < 1) \
             or type(q) != str or _type not in {'stock', 'bond'} \
-            or market not in {'russian', 'foreign', 'all'}:
+            or market not in {'russian', 'foreign'}:
                 raise TypeError("Incorrect argument format")
 
             currency = request.GET.get('currency', None)
