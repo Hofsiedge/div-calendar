@@ -32,7 +32,7 @@ def parse_dohod(ticker: str, start: datetime.date, end: datetime.date) -> pd.Dat
     df.dividends = dividends
     # TODO: replace with data from the DB
     df.name.fillna(ticker, inplace=True)
-    df.logo.fillna("https://static.tinkoff.ru/brands/traiding/RU0009029540.png", inplace=True)
+    df.logo.fillna("https://static.tinkoff.ru/brands/traiding/RU0009029540x160.png", inplace=True)
     df.currency.fillna("RUB", inplace=True)
 
     return df
