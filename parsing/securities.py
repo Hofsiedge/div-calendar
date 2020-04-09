@@ -70,7 +70,7 @@ def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
         types.append('stock' if symbol['symbolType'] == 'stock' else 'bond')
         currencies.append(symbol['currency'])
         exchanges.append(symbol['exchange'])
-        logos.append(f'https://static.tinkoff.ru/brands/traiding/{symbol["logoName"]}')
+        logos.append(f'https://static.tinkoff.ru/brands/traiding/{symbol["logoName"].split('.')[0]}x160.png')
         prices.append(i['price']['value'])
         yields.append(i.get('totalYield', 0))
 
