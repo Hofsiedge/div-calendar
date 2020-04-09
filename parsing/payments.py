@@ -20,7 +20,7 @@ def parse_dohod(ticker: str, start: datetime.date, end: datetime.date) -> pd.Dat
                and td.get('style', '') != 'display: none;']
         if not tds:
             continue
-        date = datetime.datetime.strptime(tds[0].strip(), '%d.%m.%Y').date()
+        date = datetime.datetime.strptime(tds[0].strip().split()[0], '%d.%m.%Y').date()
         if not start < date < end:
             continue
         forecasts.append('forecast' in row.get('class', []))
