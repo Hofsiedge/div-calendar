@@ -9,6 +9,10 @@ def parse_dohod(ticker: str, start: datetime.date, end: datetime.date) -> pd.Dat
         return None
 
     soup = BeautifulSoup(r.text, features='html.parser')
+    yield_ = float(soup.find('tr', {'class': 'frow'}).find('td').text.strip()[:-1])
+    if yield_ == 0:
+        return None
+
     tables = soup.findAll("table", {"class": "content-table"})
     rows = tables[1].findChildren("tr")
 
@@ -32,8 +36,8 @@ def parse_dohod(ticker: str, start: datetime.date, end: datetime.date) -> pd.Dat
     df.forecast = forecasts
     df.dividends = dividends
     df.name.fillna(ticker, inplace=True)
-    entity = Security.objects.get(ticker=ticker)
-    df.logo.fillna(entity.logo if entity else "https://static.tinkoff.ru/brands/traiding/RU0009029540x160.png",
+    security = Security.objects.get(ticker=ticker)
+    df.logo.fillna(security.logo if security else "https://static.tinkoff.ru/brands/traiding/RU0009029540x160.png",
                    inplace=True)
     df.currency.fillna(entity.currency if entity else "", inplace=True)
 
@@ -47,4 +51,4 @@ def fetch_payments(securities: list, start_date: str, end_date: str):
         res = parse_dohod(security, start, end)
         if res is not None:
             data.append(res)
-    return pd.concat(data).to_dict(orient='records')
+    return pd.concat(data).to_dict(orient='records') if data else []
