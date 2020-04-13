@@ -1,6 +1,7 @@
 import datetime, requests
 import pandas as pd
 from bs4 import BeautifulSoup
+from security.models import Security
 
 def parse_dohod(ticker: str, start: datetime.date, end: datetime.date) -> pd.DataFrame:
     r = requests.get(f"https://www.dohod.ru/ik/analytics/dividend/{ticker.lower()}")
@@ -30,10 +31,11 @@ def parse_dohod(ticker: str, start: datetime.date, end: datetime.date) -> pd.Dat
     df.date = dates
     df.forecast = forecasts
     df.dividends = dividends
-    # TODO: replace with data from the DB
     df.name.fillna(ticker, inplace=True)
-    df.logo.fillna("https://static.tinkoff.ru/brands/traiding/RU0009029540x160.png", inplace=True)
-    df.currency.fillna("RUB", inplace=True)
+    entity = Security.objects.get(ticker=ticker)
+    df.logo.fillna(entity.logo if entity else "https://static.tinkoff.ru/brands/traiding/RU0009029540x160.png",
+                   inplace=True)
+    df.currency.fillna(entity.currency if entity else "", inplace=True)
 
     return df
 

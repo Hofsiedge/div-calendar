@@ -1,6 +1,8 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from parsing import search_securities
+from .serializers import SecuritySerializer
+
 
 def search_web(request):
     if request.method == 'GET':
@@ -25,7 +27,9 @@ def search_web(request):
             if currency is not None and currency not in {'RUB', 'USD'}:
                 raise TypeError("Incorrect currency format")
             result = search_securities(q, _type, 0, limit, market, currency)
-            return JsonResponse(result, safe=False, json_dumps_params={'ensure_ascii': False})
+            serializer = SecuritySerializer(result, many=True)
+
+            return JsonResponse(serializer.data, safe=False, json_dumps_params={'ensure_ascii': False})
 
             """
             return JsonResponse([{
@@ -40,6 +44,7 @@ def search_web(request):
             """
 
         except (TypeError, KeyError) as e:
+            raise e
             return JsonResponse(
                 {'status': 'false', 'message': str(e)},
                 status=400)
