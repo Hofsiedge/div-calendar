@@ -1,7 +1,7 @@
 import json
 from django.shortcuts import render
 from django.http import JsonResponse
-from parsing import search_posts
+from .services import search_posts
 
 def get_posts(request):
     if request.method == 'POST':

@@ -39,7 +39,7 @@ def parse_dohod(ticker: str, start: datetime.date, end: datetime.date) -> pd.Dat
     security = Security.objects.get(ticker=ticker)
     df.logo.fillna(security.logo if security else "https://static.tinkoff.ru/brands/traiding/RU0009029540x160.png",
                    inplace=True)
-    df.currency.fillna(entity.currency if entity else "", inplace=True)
+    df.currency.fillna(security.currency if security else "", inplace=True)
 
     return df
 

@@ -1,7 +1,7 @@
 import json, re
 from django.shortcuts import render
 from django.http import JsonResponse
-from parsing import fetch_payments
+from .services import fetch_payments
 
 date_pattern = re.compile(r'^\d{4}(-\d{2}){2}$')
 

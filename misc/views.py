@@ -1,5 +1,5 @@
 from django.http import JsonResponse
-from parsing import get_rate
+from .services import get_rate
 
 # TODO: add caching
 def usd_rub_rate(request):

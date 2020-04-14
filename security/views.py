@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from django.http import JsonResponse
-from parsing import search_securities
+from .services import search_securities
 from .serializers import SecuritySerializer
 
 
