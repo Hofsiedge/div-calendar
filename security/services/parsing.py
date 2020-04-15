@@ -158,7 +158,7 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
     if not query:
         return []
 
-    indices = cache.get(query)
+    indices = cache.get(market[0] + type[0] + '_' + query)
 
     if indices is not None:
         securities = Security.objects.filter(id__in=indices)
@@ -207,6 +207,6 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
         securities = list(present)
 
     # TODO: limits
-    cache.set(query, tuple([s.id for s in securities]) if securities else tuple())
+    cache.set(market[0] + type[0] + '_' + query, tuple([s.id for s in securities]) if securities else tuple())
 
     return securities
