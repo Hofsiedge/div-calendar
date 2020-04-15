@@ -21,3 +21,4 @@ class Security(models.Model):
 
     def get_type(self):
         return 'stock' if self.stock else 'bond'
+
