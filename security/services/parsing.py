@@ -30,6 +30,29 @@ async def fetch_yield_fs(session: aiohttp.ClientSession, ticker: str):
             print(e)
             return 0
 
+async def fetch_yield_price_fb(session: aiohttp.ClientSession, url: str) -> tuple:
+    async with session.get(url) as r:
+        if r.status != 200:
+            return None
+        text = await r.text()
+        soup = BeautifulSoup(text, 'html.parser')
+        d = {'Валюта': None, 'Номинал': None}
+        for row in soup.find_all('table')[-2].find_all('tr'):
+            tds = row.find_all('td')
+            if len(tds) == 2 and tds[0].text.strip() in d:
+                d[tds[0].text.strip()] = tds[1].text.strip()
+        if d['Валюта'] not in {'RUB', 'USD'}:
+            return None
+        tables  = soup.find_all('table')
+        try:
+            _yield  = float(tables[4].find_all('td')[3].text.replace(',', '.'))
+            price   = float(d['Номинал'].replace(',', '.')) \
+                * float(soup.find_all('table')[3].find_all('td')[7].text.replace(',', '.'))
+
+            return d['Валюта'], price, _yield
+        except:
+            return None
+
 
 async def async_map(tickers, coroutine):
     if tickers is None or type(tickers) != len(tickers) == 0:
@@ -73,35 +96,60 @@ def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
         return None
 
     data = r.json()['payload']['values']
-    df = pd.DataFrame(columns=['ticker', 'name', 'type', 'logo', 'price',
-                               'currency', 'exchange', 'yield'])
-    tickers, names, types, logos, prices = [], [], [], [], []
-    currencies, exchanges, yields = [], [], []
+    securities = []
+
     for i in data:
         symbol = i['symbol']
-        tickers.append(symbol['ticker'])
-        names.append(symbol['showName'])
-        types.append(type)
-        currencies.append(symbol['currency'])
-        exchanges.append(symbol['exchange'])
         logo_name = 'x160.'.join(symbol['logoName'].split('.'))
-        logos.append(f'https://static.tinkoff.ru/brands/traiding/{logo_name}')
-        prices.append(i['price']['value'])
-        yields.append(i.get('totalYield', 0))
+        securities.append(Security(
+            ticker  = symbol['ticker'],
+            name    = symbol['showName'],
+            stock   = type.lower() == 'stock',
+            currency = symbol['currency'],
+            exchange = symbol['exchange'],
+            logo    = f'https://static.tinkoff.ru/brands/traiding/{logo_name}',
+            price   = i['price']['value'],
+            _yield  = i.get('totalYield', 0),
+            foreign =market.lower() == 'foreign',
+        ))
+
+    return securities
 
 
-    df.ticker   = tickers
-    df.name     = names
-    df.type     = types
-    df.logo     = logos
-    df.price    = prices
-    df.currency = currencies
-    df.exchange = exchanges
-    df['yield'] = yields
-    if currency:
-        df = df[df.currency == currency]
+def search_fb(query: str):
+    r = requests.get(f'https://www.finanz.ru/resultaty-poiska?_type=anleihen&_search={query}')
+    soup = BeautifulSoup(r.text, 'html.parser')
+    securities = []
+    urls = []
+    for row in soup.find_all('table')[1].find_all('tr'):
+        tds     = row.find_all('td')
+        try:
+            urls.append('https://www.finanz.ru' + tds[0].find('a')['href'])
+            securities.append(Security(
+                name = tds[0].text.strip(),
+                ticker  = tds[4].text.strip(),
+                stock=False,
+                exchange='',
+                logo='',
+                foreign=True
+            ))
+        except Exception as e:
+            continue
 
-    return df
+    result = []
+    values = iter(fetch_async(urls, fetch_yield_price_fb))
+    for security in securities:
+        value = next(values)
+        if value is None:
+            continue
+        currency, price, _yield = value
+        security.currency   = currency
+        security.price      = price
+        security._yield     = _yield
+        security.save()
+        result.append(security)
+
+    return result
 
 
 def search_securities(query: str, type: str, offset: int = None, limit: int = None,
@@ -117,34 +165,31 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
     else:
         if len(query) == 1:
             # update if contains outdated
-            return Securities.objects.filter(Q(ticker__icontains=query)
-                                           | Q(name__icontains=query))
+            return Security.objects.filter(
+                Q(foreign = market.lower() == 'foreign'),
+                Q(stock = type == 'stock'),
+                Q(ticker__icontains=query) | Q(name__icontains=query))
 
-        df      = search_tinkoff(query, type, offset, limit, market, currency)
+        securities = []
+        if type == 'bond' and market.lower() == 'foreign':
+            print('FB')
+            securities = search_fb(query)
+        else:
+            securities  = search_tinkoff(query, type, offset, limit, market, currency)
         # TODO: profile to check that set improves performance
-        present = Security.objects.filter(ticker__in=set(df.ticker))
+        present = Security.objects.filter(ticker__in=set([s.ticker for s in securities]))
 
         present_tickers = {s.ticker for s in present.only('ticker')}
-        missing = [
-            Security(
-                ticker   = s.ticker,
-                name     = s['name'],
-                logo     = s.logo,
-                currency = s.currency,
-                exchange = s.exchange,
-                stock    = s.type == 'stock',
-                price    = s.price,
-                _yield   = s['yield'],
-                foreign  = market == 'foreign',
-            ) for _, s in df[~df.ticker.isin(present_tickers)].iterrows()]
+        missing = [s for s in securities if s.ticker not in present_tickers]
 
         yesterday   = datetime.datetime.now() - datetime.timedelta(1)
         outdated    = present.filter(last_update__lt=yesterday)
 
+        s_dict = {s.ticker: s for s in securities}
         for security in outdated:
-            source          = df[df.ticker == security.ticker]
-            security.price  = source['price']
-            security._yield = source['yield']
+            source          = s_dict[security.ticker]
+            security.price  = source.price
+            security._yield = source._yield
 
         if type == 'stock' and (len(missing) > 0 or outdated.exists()):
             source  = missing + list(outdated)

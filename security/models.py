@@ -7,13 +7,13 @@ class Security(models.Model):
     # TODO: index by ticker
     ticker      = models.CharField(max_length=25)
     name        = models.CharField(max_length=150)
-    logo        = models.URLField(max_length=200)
-    currency    = models.CharField(max_length=3)
-    exchange    = models.CharField(max_length=6) # MOEX, SPB, NASDAQ, NYSE
+    logo        = models.URLField(max_length=200, blank=True)
+    currency    = models.CharField(max_length=3, blank=True)
+    exchange    = models.CharField(max_length=6, blank=True) # MOEX, SPB, NASDAQ, NYSE
     stock       = models.BooleanField() # stock or bond
     foreign     = models.BooleanField()
-    price       = models.FloatField()
-    _yield      = models.FloatField()
+    price       = models.FloatField(blank=True)
+    _yield      = models.FloatField(blank=True)
     last_update = models.DateTimeField(auto_now=True)
 
     def __str__(self):
