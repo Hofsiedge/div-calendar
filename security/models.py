@@ -5,7 +5,7 @@ class Security(models.Model):
     """ A stock or a bond"""
 
     # TODO: index by ticker
-    ticker      = models.CharField(max_length=10)
+    ticker      = models.CharField(max_length=25)
     name        = models.CharField(max_length=150)
     logo        = models.URLField(max_length=200)
     currency    = models.CharField(max_length=3)

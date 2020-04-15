@@ -46,10 +46,13 @@ def parse_finanz(security: Security, start: datetime.date, end: datetime.date) -
     ticker = security.ticker
 
     pattern = re.compile(r'Инструмент успешно добавлен')
-    r = request.get(f'https://www.finanz.ru/resultaty-poiska?_type=anleihen&_search={ticker}')
-    soup = BeautifulSoup(r.text)
-    if not p.search(soup.find('div', {'class': 'state_content'})):
+    r = requests.get(f'https://www.finanz.ru/resultaty-poiska?_type=anleihen&_search={ticker}')
+    soup = BeautifulSoup(r.text, 'html.parser')
+    # FIXME: always finds
+    """
+    if not pattern.search(soup.find('div', {'class': 'state_content'}).text):
         return None
+    """
 
     d = {key: None for key in (
         'Валюта', 'Дата выпуска', 'Купон', 'Первая купонная выплата',
@@ -59,31 +62,31 @@ def parse_finanz(security: Security, start: datetime.date, end: datetime.date) -
 
     for row in soup.find_all('table')[-2].find_all('tr'):
         tds = row.find_all('td')
-        if len(tds == 2) and tds[0].text.strip() in d:
+        if len(tds) == 2 and tds[0].text.strip() in d:
             d[tds[0].text.strip()] = tds[1].text.strip()
 
     currency        = d['Валюта']
     if currency not in {'RUB', 'USD', 'EUR'}:
         raise ValueError(f'Incorrect currency value: {currency}')
-    first_coupon    = datetime.datetime.strptime(d['Первая купонная вылпата'], '%d.%m.%Y').date()
-    last_coupon     = datetime.datetime.strptime(d['Последняя купонная вылпата'], '%d.%m.%Y').date()
+    first_coupon    = datetime.datetime.strptime(d['Первая купонная выплата'], '%d.%m.%Y').date()
+    last_coupon     = datetime.datetime.strptime(d['Последняя купонная выплата'], '%d.%m.%Y').date()
     redemption_date = datetime.datetime.strptime(d['Дата погашения'], '%d.%m.%Y').date()
-    nominal         = float(d['Номинал'])
-    coupon          = nominal * float(d['Купон'][:-1])
-    interval        = d['Периодичность'] or 365 / d['Количество выплат в год']
+    nominal         = float(d['Номинал'].replace(',', '.'))
+    coupon          = nominal * float(d['Купон'][:-1].replace(',', '.'))
+    interval        = datetime.timedelta(float((d['Периодичность выплат'] or '0').replace(',', '.')) or 365 / float(d['Количество выплат в год'].replace(',', '.')))
 
     # ceiling trick (negated floor of negated)
     first = first_coupon if start <= first_coupon else \
         first_coupon - (-(start - first_coupon) // interval) * interval
     right_bound = min(end, last_coupon)
     dates  = (first + i * interval \
-               for i in range(-(-max(right_bound - first, 0) // interval)))
+               for i in range(-(-max(right_bound - first, datetime.timedelta(0)) // interval)))
 
     payments = [Payment(
         security=security,
         date=date,
         dividends=coupon,
-        forecast=data > datetime.datetime.now().date()
+        forecast=date > datetime.datetime.now().date()
     ) for date in dates]
 
     if start <= redemption_date <= end:
