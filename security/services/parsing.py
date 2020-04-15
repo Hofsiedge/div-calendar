@@ -2,6 +2,7 @@ import requests, aiohttp, asyncio, datetime
 import pandas as pd
 from bs4 import BeautifulSoup
 from django.core.cache import cache
+from django.db.models import Q
 from security.models import Security
 
 
