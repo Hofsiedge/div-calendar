@@ -128,7 +128,7 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
         missing = [
             Security(
                 ticker   = s.ticker,
-                name     = s.name,
+                name     = s['name'],
                 logo     = s.logo,
                 currency = s.currency,
                 exchange = s.exchange,
@@ -156,7 +156,9 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
                 s._yield = yields.__next__()
                 s.save()
 
-        securities = missing + list(present)
+        # by now missing is already included in present (present was not
+        # evaluated yet)
+        securities = list(present)
 
     # TODO: limits
     cache.set(query, tuple([s.id for s in securities]) if securities else tuple())

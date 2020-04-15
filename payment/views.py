@@ -2,6 +2,7 @@ import json, re
 from django.shortcuts import render
 from django.http import JsonResponse
 from .services import fetch_payments
+from .serializers import PaymentSerializer
 
 date_pattern = re.compile(r'^\d{4}(-\d{2}){2}$')
 
@@ -24,7 +25,8 @@ def get_payments(request):
                     raise TypeError("Incorrect argument format")
 
             result = fetch_payments(securities, start_date, end_date)
-            return JsonResponse(result, safe=False, json_dumps_params={'ensure_ascii': False})
+            serializer = PaymentSerializer(result, many=True)
+            return JsonResponse(serializer.data, safe=False, json_dumps_params={'ensure_ascii': False})
 
             """
             return JsonResponse([{

@@ -1,5 +1,6 @@
 from django.db import models
 
+# TODO: add currency. Sometimes currencies are changed over the period
 class Payment(models.Model):
     """ Dividend payment or bond redemption """
 
