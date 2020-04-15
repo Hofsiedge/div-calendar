@@ -6,7 +6,7 @@ from .models import Payment
 class PaymentSerializer(serializers.ModelSerializer):
 
     currency    = serializers.CharField(source='security.currency', read_only=True)
-    name        = serializers.CharField(source='security.name', read_only=True)
+    name        = serializers.CharField(source='security.ticker', read_only=True)
     logo        = serializers.CharField(source='security.logo', read_only=True)
 
     class Meta:
