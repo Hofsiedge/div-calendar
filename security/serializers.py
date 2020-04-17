@@ -4,16 +4,16 @@ from .models import Security
 
 
 class SecuritySerializer(serializers.ModelSerializer):
+    type = serializers.CharField(source='get_type', read_only=True)
     class Meta:
         model = Security
         fields = ['ticker', 'name', 'logo', 'currency',
-                  'exchange', 'price', 'yield',]
+                  'exchange', 'price', 'yield', 'type']
         read_only_fields = ['last_update']
         extra_kwargs = {
             'foreign': {'write_only': True},
             '_yield': {'view_name': 'yield'},
         }
-        type = serializers.CharField(source='get_type', read_only=True)
 
     def create(self, validated_data):
         security = Security(
