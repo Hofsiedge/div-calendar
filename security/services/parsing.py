@@ -1,9 +1,10 @@
-import requests, aiohttp, asyncio, datetime
-import pandas as pd
+import re, requests, locale, aiohttp, asyncio, datetime
 from bs4 import BeautifulSoup
 from django.core.cache import cache
 from django.db.models import Q
 from security.models import Security
+
+locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 
 
 async def fetch_yield_rs(session: aiohttp.ClientSession, ticker: str):
@@ -55,6 +56,69 @@ async def fetch_yield_price_fb(session: aiohttp.ClientSession, url: str) -> tupl
             return None
 
 
+def rusbond_decode(s: str) -> str:
+    return s.encode('cp1251').decode('cp1252').strip()
+
+
+async def rusbonds_single_bond(session: aiohttp.ClientSession, tool: int) -> Security:
+    d   = {key: None for key in (
+        'ISIN код:', 'Наименование:', 'Номинал:', 'Данные госрегистрации:',
+        'Цена срвзв. чистая, % от номинала:',
+    )}
+    async with session.get(f'https://www.rusbonds.ru/ank_obl.asp?tool={tool}') as r:
+        if r.status != 200:
+            return None
+        text = await r.text()
+        soup = BeautifulSoup(text, 'html.parser')
+
+        for tr in filter(
+            lambda x: len(x) == 2,
+            soup.find('table', {'class': 'tbl_data'}).find_all('tr', {'class': ''})):
+
+            tds = tr.find_all('td')
+            try:
+                first = rusbond_decode(tds[0].text)
+            except Exception as e:
+                print(e)
+                print(tr.text)
+                return
+            if len(tds) == 2 and first in d:
+                d[first] = rusbond_decode(tds[1].text)
+
+    async with session.get('https://www.rusbonds.ru/tooldistrib.asp?tool={tool}') as r:
+        if r.status != 200:
+            return None
+        text = await r.text()
+        soup = BeautifulSoup(text, 'html.parser')
+        tds  = soup.find('table', {'class': 'tbl_data tbl_headgrid'}).find_all('td')
+        d['Торговая площадка'] = rusbond_decode(tds[1].text)
+
+    async with session.get('https://www.rusbonds.ru/tyield.asp?tool={tool}') as r:
+        if r.status != 200:
+            return None
+        text = await r.text()
+        soup = BeautifulSoup(text, 'html.parser')
+        trs  = soup.find('table', {'class': 'tbl_data tbl_headgrid'}).find_all('tr')
+        tds  = trs[6].find_all('td')
+        if decode(tds[0].text).strip() != 'Текущая дох-сть, % год.:':
+            print('Wrong row in security parsing!')
+            return None
+        d['yield'] = float(rusbond_decode(tds[1].text))
+
+
+    security = Security(
+        ticker  = d['ISIN код:'],
+        name    = d['Наименование:'],
+        price   = float(d['Номинал:'].split()[0]) * float(d['Цена срвзв. чистая, % от номинала:']),
+        stock   = False,
+        logo    = '',
+        foreign = False, # TODO: check
+        _yield  = d['yield'],
+        exchange = 'MOEX' if d['Торговая площадка'] == 'МосБиржа' else 'SPBEX',
+        currency = d['Номинал:'].split()[-1],
+    )
+
+
 async def async_map(tickers, coroutine):
     if tickers is None or type(tickers) != len(tickers) == 0:
         return []
@@ -63,6 +127,7 @@ async def async_map(tickers, coroutine):
     async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
         futures = [coroutine(session, ticker) for ticker in tickers]
         return await asyncio.gather(*futures)
+
 
 def fetch_async(data, coroutine) -> list:
     loop    = asyncio.new_event_loop()
@@ -75,8 +140,46 @@ def fetch_async(data, coroutine) -> list:
     return result
 
 
+def search_rusbonds(query: str, offset: int = None, limit: int = None) -> list:
+    # exchanging
+    r = requests.get(f'https://www.rusbonds.ru/srch_simple.asp?go=1&nick={query}&status=T')
+    if r.status_code != 200:
+        return []
+    soup = BeautifulSoup(r.text, 'html.parser')
+    # urls_exchanging = ['https://www.rusbonds.ru' + tr.find('a')['href']
+            # for tr in soup.find('table', {'class': 'tbl_data tbl_headgrid'}).find_all('tr')]
+    tool_pattern = re.compile('(?<=tool=)(\d+)')
+    try:
+        tools_exchanging = [int(tool_pattern.search(tr.find('a')['href']).group())
+                            for tr in soup.find('table', {'class': 'tbl_data tbl_headgrid'})\
+                            .find('tbody').find_all('tr')]
+    except AttributeError as e:
+        print(e)
+        tools_exchanging = []
+    try:
+        # placed
+        r = requests.get(f'https://www.rusbonds.ru/srch_simple.asp?go=1&nick={query}&status=W')
+        if r.status_code != 200:
+            return []
+        soup = BeautifulSoup(r.text, 'html.parser')
+        # urls_placed = ['https://www.rusbonds.ru' + tr.find('a')['href']
+                       # for tr in soup.find('table', {'class': 'tbl_data tbl_headgrid'}).find_all('tr')]
+        tools_placed = [int(tool_pattern.search(tr.find('a')['href']).group())
+                        for tr in soup.find('table', {'class': 'tbl_data tbl_headgrid'})\
+                        .find('tbody').find_all('tr')]
+
+    except AttributeError as e:
+        print(e)
+        tools_placed = []
+
+    securities = fetch_async(tools_exchanging, rusbonds_single_bond)
+    # TODO: placed urls
+    return securities
+
+
+
 def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
-                   market: str = None, currency: str = None) -> pd.DataFrame:
+                   market: str = None, currency: str = None) -> list:
     url = f'https://api.tinkoff.ru/trading/{"stocks" if type == "stock" else "bonds"}/list'
     if currency == 'RUB':
         market = 'Russian'
@@ -172,8 +275,19 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
                 Q(ticker__icontains=query) | Q(name__icontains=query))
 
         securities = []
+        """
+        if type == 'bond':
+            if market.lower() == 'foreign':
+                securities = search_fb(query)
+            else:
+                securities  = search_rusbonds(query)
+                tickers     = {s.ticker for s in securities}
+                securities2 = search_tinkoff(query, type, offset, limit, market, currency)
+                # TODO: benchmark to compare with securities.extend([s for s in
+                # securities2 if s.ticker not in tickers])
+                securities.extend(filter(lambda s: s.ticker not in tickers, securities2))
+        """
         if type == 'bond' and market.lower() == 'foreign':
-            print('FB')
             securities = search_fb(query)
         else:
             securities  = search_tinkoff(query, type, offset, limit, market, currency)
@@ -205,6 +319,9 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
         # by now missing is already included in present (present was not
         # evaluated yet)
         securities = list(present)
+
+    securities = [s for s in securities
+                  if query.lower() in s.ticker.lower() or query.lower() in s.name.lower()]
 
     # TODO: limits
     cache.set(market[0] + type[0] + '_' + query, tuple([s.id for s in securities]) if securities else tuple())
