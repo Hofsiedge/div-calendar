@@ -34,13 +34,19 @@ def search_rbc(ticker: str, offset: int, limit: int):
         for link in links:
             date_str = next(categories).text.strip()[9:]
             if p1.match(date_str):
-                format_string = '%d %b, %H:%M'
+                date = datetime.datetime.strptime(
+                    ' 2020,'.join(date_str.split(',')),
+                    '%d %b %Y, %H:%M'
+                )
             elif p2.match(date_str):
-                format_string = '%d %b %Y, %H:%M'
+                date = datetime.datetime.strptime(date_str, '%d %b %Y, %H:%M')
             else:
-                format_string = '%H:%M'
+                date = datetime.datetime.strptime(date_str, '%H:%M')
+                date = datetime.datetime.combine(
+                    datetime.datetime.now().date(),
+                    date.time()
+                )
 
-            date = datetime.datetime.strptime(date_str, format_string)
             post = Post(
                 security    = security,
                 date        = date,
