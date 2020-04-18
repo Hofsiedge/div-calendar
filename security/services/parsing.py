@@ -250,7 +250,7 @@ def search_fb(query: str):
         security.currency   = currency
         security.price      = price
         security._yield     = _yield
-        security.save()
+        # security.save()
         result.append(security)
 
     return result
