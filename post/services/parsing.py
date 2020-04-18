@@ -27,19 +27,20 @@ def search_rbc(ticker: str, offset: int, limit: int):
         posts = []
 
         categories = iter(soup.findAll('span', {'class': 'search-item__category'}))
-        p1 = re.compile(r'\d\d \w{3}, \d\d:\d\d')       # %d %b, %H:%M
-        p2 = re.compile(r'\d\d \w{3} \d{4}, \d\d:\d\d') # %d %b %Y, %H:%M
+        p1 = re.compile(r'\d\d \w{3} \d{4}, \d\d:\d\d') # %d %b %Y, %H:%M
+        p2 = re.compile(r'\d\d \w{3}, \d\d:\d\d')       # %d %b, %H:%M
         p3 = re.compile(r'\d\d:\d\d')                   # %H:%M
 
         for link in links:
             date_str = next(categories).text.strip()[9:]
+
             if p1.match(date_str):
+                date = datetime.datetime.strptime(date_str, '%d %b %Y, %H:%M')
+            elif p2.match(date_str):
                 date = datetime.datetime.strptime(
                     ' 2020,'.join(date_str.split(',')),
                     '%d %b %Y, %H:%M'
                 )
-            elif p2.match(date_str):
-                date = datetime.datetime.strptime(date_str, '%d %b %Y, %H:%M')
             else:
                 date = datetime.datetime.strptime(date_str, '%H:%M')
                 date = datetime.datetime.combine(
