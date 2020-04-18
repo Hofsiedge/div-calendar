@@ -306,14 +306,16 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
             security.price  = source.price
             security._yield = source._yield
 
-        if type == 'stock' and (len(missing) > 0 or outdated.exists()):
+        if (len(missing) > 0 or outdated.exists()):
             source  = missing + list(outdated)
-            yields  = iter(fetch_async(
-                [s.ticker for s in source],
-                fetch_yield_fs if market.lower() == 'foreign' else fetch_yield_rs
-            ))
+            if type == 'stock':
+                yields  = iter(fetch_async(
+                    [s.ticker for s in source],
+                    fetch_yield_fs if market.lower() == 'foreign' else fetch_yield_rs
+                ))
+                for s in source:
+                    s._yield = yields.__next__()
             for s in source:
-                s._yield = yields.__next__()
                 s.save()
 
         # by now missing is already included in present (present was not
