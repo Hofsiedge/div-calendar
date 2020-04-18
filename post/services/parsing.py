@@ -27,8 +27,8 @@ def search_rbc(ticker: str, offset: int, limit: int):
         posts = []
 
         categories = iter(soup.findAll('span', {'class': 'search-item__category'}))
-        p1 = re.compile(r'\d\d \w{3} \d{4}, \d\d:\d\d') # %d %b %Y, %H:%M
-        p2 = re.compile(r'\d\d \w{3}, \d\d:\d\d')       # %d %b, %H:%M
+        p1 = re.compile(r'\d\d? \w{3} \d{4}, \d\d:\d\d') # %d %b %Y, %H:%M
+        p2 = re.compile(r'\d\d? \w{3}, \d\d:\d\d')       # %d %b, %H:%M
         p3 = re.compile(r'\d\d:\d\d')                   # %H:%M
 
         for link in links:
