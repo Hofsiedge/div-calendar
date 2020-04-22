@@ -73,7 +73,8 @@ def parse_finanz(security: Security, start: datetime.date, end: datetime.date) -
     redemption_date = datetime.datetime.strptime(d['Дата погашения'], '%d.%m.%Y').date()
     nominal         = float(d['Номинал'].replace(',', '.'))
     coupon          = nominal * float(d['Купон'][:-1].replace(',', '.'))
-    interval        = datetime.timedelta(float((d['Периодичность выплат'] or '0').replace(',', '.')) or 365 / float(d['Количество выплат в год'].replace(',', '.')))
+    interval        = datetime.timedelta(float((d['Периодичность выплат'] or '0').replace(',', '.'))\
+            or 365 / float(d['Количество выплат в год'].replace(',', '.')))
 
     # ceiling trick (negated floor of negated)
     first = first_coupon if start <= first_coupon else \
@@ -100,6 +101,42 @@ def parse_finanz(security: Security, start: datetime.date, end: datetime.date) -
     return payments
 
 
+def parse_beatmarket(security: Security, start: datetime.date, end: datetime.date) -> list:
+    r = requests.get(
+            f'https://www.marketbeat.com/stocks/NYSE/{security.ticker}/dividend/',
+            allow_redirects=False)
+    if 301 <= r.status_code <= 308:
+        return None
+    r.next += 'dividend/'
+    with requests.Session() as s:
+        r = s.send(r.next)
+    if r.status_code != 200:
+        return None
+
+    soup = BeautifulSoup(r.text, 'html.parser')
+    payments = []
+    for tr in soup.find_all('table')[1].find('tbody').find_all('tr'):
+        if 'bottom-sort' in tr.get('class'):
+            continue
+        tds = tr.find_all('td')
+        try:
+            date = datetime.datetime.strptime(tds[6], '%m/%d/%Y').date(),
+            if not start <= date <= end:
+                continue
+            payments.append(Payment(
+                security = security,
+                date     = date,
+                dividend = float(tds[2][1:]),
+                forecast = False,
+                # currency = {'$': 'USD'}.get(tds[2][0], security.currency),
+            ))
+        except Exception as e:
+            print('<BUG: fb_payments>\nException occured during fetching '
+                    f'payments for {security}, {start}, {end}:', e)
+            continue
+    return payments
+
+
 def fetch_payments(tickers: list, start_date: str, end_date: str):
     start   = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
     end     = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
@@ -110,4 +147,9 @@ def fetch_payments(tickers: list, start_date: str, end_date: str):
             data.extend(parse_dohod(security, start, end) or [])
         elif security.foreign and not security.stock:
             data.extend(parse_finanz(security, start, end) or [])
+        elif security.foreign and security.stock:
+            # FIXME
+            # data.extend(parse_beatmarket(security, start, end) or [])
+            pass
+
     return data

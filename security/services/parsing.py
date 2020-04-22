@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 from django.core.cache import cache
 from django.db.models import Q
 from security.models import Security
+from misc.services import fetch_async
 
 locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 
@@ -126,27 +127,6 @@ async def rusbonds_single_bond(session: aiohttp.ClientSession, tool: int) -> Sec
         currency = d['Номинал:'].split()[-1],
     )
     return security
-
-
-async def async_map(tickers, coroutine):
-    if tickers is None or type(tickers) != len(tickers) == 0:
-        return []
-    conn = aiohttp.TCPConnector(limit=20)
-    timeout = aiohttp.ClientTimeout(total=7)
-    async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
-        futures = [coroutine(session, ticker) for ticker in tickers]
-        return await asyncio.gather(*futures)
-
-
-def fetch_async(data, coroutine) -> list:
-    loop    = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    result  = loop.run_until_complete(
-        async_map(data, coroutine)
-    )
-    loop.run_until_complete(asyncio.sleep(0))
-    loop.close()
-    return result
 
 
 # TODO: deal with pagination

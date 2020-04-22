@@ -1,1 +1,1 @@
-from .parsing import get_rate
+from .parsing import get_rate, fetch_async

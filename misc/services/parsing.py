@@ -1,4 +1,5 @@
-import requests
+import requests, locale, aiohttp, asyncio
+
 
 def get_rate():
     # TODO: replace placeholder with caching
@@ -16,3 +17,26 @@ def get_rate():
         print(e)
         return placeholder
     return {'rubToUsd': ru, 'usdToRub': ur}
+
+
+async def async_map(tickers, coroutine, *args, **kwargs):
+    if tickers is None or type(tickers) != len(tickers) == 0:
+        return []
+    conn = aiohttp.TCPConnector(limit=20)
+    timeout = aiohttp.ClientTimeout(total=7)
+    async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
+        futures = [coroutine(session, ticker, *args, **kwargs) for ticker in tickers]
+        return await asyncio.gather(*futures)
+
+
+def fetch_async(data, coroutine, *args, **kwargs) -> list:
+    loop    = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    result  = loop.run_until_complete(
+        async_map(data, coroutine, *args, **kwargs)
+    )
+    loop.run_until_complete(asyncio.sleep(0))
+    loop.close()
+    return result
+
+
