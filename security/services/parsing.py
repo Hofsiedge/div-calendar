@@ -32,6 +32,7 @@ async def fetch_yield_fs(session: aiohttp.ClientSession, ticker: str):
             print(e)
             return 0
 
+
 async def fetch_yield_price_fb(session: aiohttp.ClientSession, url: str) -> tuple:
     async with session.get(url) as r:
         if r.status != 200:
@@ -56,10 +57,6 @@ async def fetch_yield_price_fb(session: aiohttp.ClientSession, url: str) -> tupl
             return None
 
 
-def rusbond_decode(s: str) -> str:
-    return s.encode('cp1251').decode('cp1252').strip()
-
-
 async def rusbonds_single_bond(session: aiohttp.ClientSession, tool: int) -> Security:
     d   = {key: None for key in (
         'ISIN код:', 'Наименование:', 'Номинал:', 'Данные госрегистрации:',
@@ -68,6 +65,8 @@ async def rusbonds_single_bond(session: aiohttp.ClientSession, tool: int) -> Sec
     async with session.get(f'https://www.rusbonds.ru/ank_obl.asp?tool={tool}') as r:
         if r.status != 200:
             return None
+        r.encoding = 'cp1251'
+
         text = await r.text()
         soup = BeautifulSoup(text, 'html.parser')
 
@@ -77,33 +76,42 @@ async def rusbonds_single_bond(session: aiohttp.ClientSession, tool: int) -> Sec
 
             tds = tr.find_all('td')
             try:
-                first = rusbond_decode(tds[0].text)
+                first = tds[0].text.strip()
             except Exception as e:
                 print(e)
                 print(tr.text)
                 return
             if len(tds) == 2 and first in d:
-                d[first] = rusbond_decode(tds[1].text)
+                d[first] = tds[1].text.strip()
 
     async with session.get('https://www.rusbonds.ru/tooldistrib.asp?tool={tool}') as r:
         if r.status != 200:
             return None
+        r.encoding = 'cp1251'
+
         text = await r.text()
         soup = BeautifulSoup(text, 'html.parser')
-        tds  = soup.find('table', {'class': 'tbl_data tbl_headgrid'}).find_all('td')
-        d['Торговая площадка'] = rusbond_decode(tds[1].text)
+        try:
+            # FIXME
+            tds  = soup.find('table', {'class': 'tbl_data tbl_headgrid'}).find_all('td')
+        except AttributeError as e:
+            print(f'Fail 1: {tool}\n{e}')
+            return None
+        d['Торговая площадка'] = tds[1].text.strip()
 
     async with session.get('https://www.rusbonds.ru/tyield.asp?tool={tool}') as r:
         if r.status != 200:
             return None
+
+        r.encoding = 'cp1251'
         text = await r.text()
         soup = BeautifulSoup(text, 'html.parser')
-        trs  = soup.find('table', {'class': 'tbl_data tbl_headgrid'}).find_all('tr')
+        trs  = soup.find('table', {'class': 'tbl_data'}).find_all('tr')
         tds  = trs[6].find_all('td')
         if decode(tds[0].text).strip() != 'Текущая дох-сть, % год.:':
             print('Wrong row in security parsing!')
             return None
-        d['yield'] = float(rusbond_decode(tds[1].text))
+        d['yield'] = float(tds[1].text.strip())
 
 
     security = Security(
@@ -117,6 +125,7 @@ async def rusbonds_single_bond(session: aiohttp.ClientSession, tool: int) -> Sec
         exchange = 'MOEX' if d['Торговая площадка'] == 'МосБиржа' else 'SPBEX',
         currency = d['Номинал:'].split()[-1],
     )
+    return security
 
 
 async def async_map(tickers, coroutine):
@@ -140,41 +149,49 @@ def fetch_async(data, coroutine) -> list:
     return result
 
 
+# TODO: deal with pagination
 def search_rusbonds(query: str, offset: int = None, limit: int = None) -> list:
     # exchanging
-    r = requests.get(f'https://www.rusbonds.ru/srch_simple.asp?go=1&nick={query}&status=T')
+    r = requests.get(
+        f'https://www.rusbonds.ru/srch_simple.asp',
+        params={'go': 1, 'status': 'T', 'nick': query.encode('cp1251')}
+    )
     if r.status_code != 200:
         return []
+    r.encoding = 'cp1251'
+
     soup = BeautifulSoup(r.text, 'html.parser')
-    # urls_exchanging = ['https://www.rusbonds.ru' + tr.find('a')['href']
-            # for tr in soup.find('table', {'class': 'tbl_data tbl_headgrid'}).find_all('tr')]
     tool_pattern = re.compile('(?<=tool=)(\d+)')
     try:
         tools_exchanging = [int(tool_pattern.search(tr.find('a')['href']).group())
                             for tr in soup.find('table', {'class': 'tbl_data tbl_headgrid'})\
-                            .find('tbody').find_all('tr')]
+                            .find('tbody').find_all('tr') if tr]
     except AttributeError as e:
         print(e)
         tools_exchanging = []
+
+    # placed
+    r = requests.get(
+        f'https://www.rusbonds.ru/srch_simple.asp',
+        params={'go': 1, 'status': 'W', 'nick': query.encode('cp1251')}
+    )
+    if r.status_code != 200:
+        return []
+
+    r.encoding = 'cp1251'
+    soup = BeautifulSoup(r.text, 'html.parser')
     try:
-        # placed
-        r = requests.get(f'https://www.rusbonds.ru/srch_simple.asp?go=1&nick={query}&status=W')
-        if r.status_code != 200:
-            return []
-        soup = BeautifulSoup(r.text, 'html.parser')
-        # urls_placed = ['https://www.rusbonds.ru' + tr.find('a')['href']
-                       # for tr in soup.find('table', {'class': 'tbl_data tbl_headgrid'}).find_all('tr')]
         tools_placed = [int(tool_pattern.search(tr.find('a')['href']).group())
                         for tr in soup.find('table', {'class': 'tbl_data tbl_headgrid'})\
-                        .find('tbody').find_all('tr')]
-
+                        .find('tbody').find_all('tr') if tr]
     except AttributeError as e:
         print(e)
         tools_placed = []
 
-    securities = fetch_async(tools_exchanging, rusbonds_single_bond)
-    # TODO: placed urls
-    return securities
+    securities_exchanging   = fetch_async(tools_exchanging, rusbonds_single_bond)
+    securities_placed       = fetch_async(tools_placed, rusbonds_single_bond)
+
+    return securities_exchanging + securities_placed
 
 
 
@@ -207,6 +224,7 @@ def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
         logo_name = 'x160.'.join(symbol['logoName'].split('.'))
         securities.append(Security(
             ticker  = symbol['ticker'],
+            isin    = symbol['isin'],
             name    = symbol['showName'],
             stock   = type.lower() == 'stock',
             currency = symbol['currency'],
@@ -214,7 +232,7 @@ def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
             logo    = f'https://static.tinkoff.ru/brands/traiding/{logo_name}',
             price   = i['price']['value'],
             _yield  = i.get('totalYield', 0),
-            foreign =market.lower() == 'foreign',
+            foreign = market.lower() == 'foreign',
         ))
 
     return securities
@@ -230,12 +248,13 @@ def search_fb(query: str):
         try:
             urls.append('https://www.finanz.ru' + tds[0].find('a')['href'])
             securities.append(Security(
-                name = tds[0].text.strip(),
+                name    = tds[0].text.strip(),
                 ticker  = tds[4].text.strip(),
-                stock=False,
-                exchange='',
-                logo='',
-                foreign=True
+                isin    = tds[4].text.strip(),
+                stock   = False,
+                exchange= '',
+                logo    = '',
+                foreign = True
             ))
         except Exception as e:
             continue
@@ -250,7 +269,6 @@ def search_fb(query: str):
         security.currency   = currency
         security.price      = price
         security._yield     = _yield
-        # security.save()
         result.append(security)
 
     return result

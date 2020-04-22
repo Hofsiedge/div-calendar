@@ -1,4 +1,4 @@
-# securities/serializers.py
+# security/serializers.py
 from rest_framework import serializers
 from .models import Security
 
@@ -7,7 +7,7 @@ class SecuritySerializer(serializers.ModelSerializer):
     type = serializers.CharField(source='get_type', read_only=True)
     class Meta:
         model = Security
-        fields = ['ticker', 'name', 'logo', 'currency',
+        fields = ['ticker', 'isin', 'name', 'logo', 'currency',
                   'exchange', 'price', 'yield', 'type']
         read_only_fields = ['last_update']
         extra_kwargs = {
@@ -18,6 +18,7 @@ class SecuritySerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         security = Security(
             ticker=validated_data['ticker'],
+            isin=validated_data['isin'],
             name=validated_data['name'],
             logo=validated_data['logo'],
             currency=validated_data['currency'],

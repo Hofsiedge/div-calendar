@@ -6,6 +6,7 @@ class Security(models.Model):
 
     # TODO: index by ticker
     ticker      = models.CharField(max_length=25, unique=True)
+    isin        = models.CharField(max_length=25, unique=False, blank=True)
     name        = models.CharField(max_length=150)
     logo        = models.URLField(max_length=200, blank=True)
     currency    = models.CharField(max_length=3, blank=True)

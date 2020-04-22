@@ -34,7 +34,7 @@ def parse_dohod(security: Security, start: datetime.date, end: datetime.date) ->
             security=security,
             date=date,
             dividends=float(tds[1]),
-            forecast='forecast' in row.get('class', [])
+            forecast='forecast' in row.get('class', []) and row.find('img') is None,
         ))
 
     return payments

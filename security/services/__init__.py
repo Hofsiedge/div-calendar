@@ -1,1 +1,1 @@
-from .parsing import search_securities
+from .parsing import search_securities, search_rusbonds
