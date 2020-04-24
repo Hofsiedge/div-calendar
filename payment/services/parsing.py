@@ -101,39 +101,54 @@ def parse_finanz(security: Security, start: datetime.date, end: datetime.date) -
     return payments
 
 
-def parse_beatmarket(security: Security, start: datetime.date, end: datetime.date) -> list:
-    r = requests.get(
-            f'https://www.marketbeat.com/stocks/NYSE/{security.ticker}/dividend/',
-            allow_redirects=False)
-    if 301 <= r.status_code <= 308:
-        return None
-    r.next += 'dividend/'
-    with requests.Session() as s:
-        r = s.send(r.next)
+def parse_ycharts(security: Security, start: datetime.date, end: datetime.date) -> list:
+    r = requests.get(f'https://ycharts.com/companies/{security.ticker}/dividend')
     if r.status_code != 200:
         return None
 
     soup = BeautifulSoup(r.text, 'html.parser')
     payments = []
-    for tr in soup.find_all('table')[1].find('tbody').find_all('tr'):
-        if 'bottom-sort' in tr.get('class'):
-            continue
-        tds = tr.find_all('td')
+    last_payments = []
+    for tr in soup.find('table', {'class': 'histDividendDataTable'}).find('tbody').find_all('tr')[1:]:
+
         try:
-            date = datetime.datetime.strptime(tds[6], '%m/%d/%Y').date(),
-            if not start <= date <= end:
+
+            date = datetime.datetime.strptime(tr.find('td', {'class': 'col3'}).text, '%m/%d/%Y').date()
+            if len(last_payments) == 2 and not start <= date <= end:
                 continue
-            payments.append(Payment(
+
+            payment = Payment(
                 security = security,
                 date     = date,
-                dividend = float(tds[2][1:]),
+                dividends= float(tr.find('td', {'class': 'col6'}).text),
                 forecast = False,
-                # currency = {'$': 'USD'}.get(tds[2][0], security.currency),
-            ))
+            )
+            if len(last_payments) < 2:
+                last_payments.append(payment)
+            if start <= date <= end:
+                payments.append(payment)
+
         except Exception as e:
             print('<BUG: fb_payments>\nException occured during fetching '
                     f'payments for {security}, {start}, {end}:', e)
             continue
+
+    if len(last_payments) == 2:
+        last_div    = last_payments[0].dividends
+        last_date   = last_payments[0].date
+        interval    = last_date - last_payments[1].date
+        # TODO: switch to Python 3.9 and refactor with the Walrus operator
+        # TODO: but that would require to deploy with Docker containers as Heroku doesn't support Python 3.6+
+        last_date   += interval
+        while (last_date <= end):
+            payments.append(Payment(
+                security = security,
+                date     = last_date,
+                dividends= last_div,
+                forecast = True,
+            ))
+            last_date += interval
+
     return payments
 
 
@@ -148,8 +163,6 @@ def fetch_payments(tickers: list, start_date: str, end_date: str):
         elif security.foreign and not security.stock:
             data.extend(parse_finanz(security, start, end) or [])
         elif security.foreign and security.stock:
-            # FIXME
-            # data.extend(parse_beatmarket(security, start, end) or [])
-            pass
+            data.extend(parse_ycharts(security, start, end) or [])
 
     return data
