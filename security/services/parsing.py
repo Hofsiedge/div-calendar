@@ -285,7 +285,7 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
                     Q(stock = type == 'stock'),
                     Q(ticker__icontains=query) | q(name__icontains=query) |
                     Q(ticker__icontains=transliterated_query) | q(name__icontains=transliterated_query))
-            else
+            else:
                 return Security.objects.filter(
                     Q(foreign = market.lower() == 'foreign'),
                     Q(stock = type == 'stock'),
