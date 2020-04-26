@@ -1,4 +1,4 @@
-import re, requests, locale, aiohttp, asyncio, datetime, string
+import re, requests, locale, aiohttp, asyncio, datetime, string, traceback
 from bs4 import BeautifulSoup
 from django.core.cache import cache
 from django.db.models import Q
@@ -205,20 +205,25 @@ def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
     securities = []
 
     for i in data:
-        symbol = i['symbol']
-        logo_name = 'x160.'.join(symbol['logoName'].split('.'))
-        securities.append(Security(
-            ticker  = symbol['ticker'],
-            isin    = symbol['isin'],
-            name    = symbol['showName'],
-            stock   = type.lower() == 'stock',
-            currency = symbol['currency'],
-            exchange = symbol['exchange'],
-            logo    = f'https://static.tinkoff.ru/brands/traiding/{logo_name}',
-            price   = i['price']['value'],
-            _yield  = i.get('totalYield', 0),
-            foreign = market.lower() == 'foreign',
-        ))
+        try:
+            symbol = i['symbol']
+            logo_name = 'x160.'.join(symbol['logoName'].split('.'))
+            securities.append(Security(
+                ticker  = symbol['ticker'],
+                isin    = symbol['isin'],
+                name    = symbol['showName'],
+                stock   = type.lower() == 'stock',
+                currency = symbol['currency'],
+                exchange = symbol['exchange'],
+                logo    = f'https://static.tinkoff.ru/brands/traiding/{logo_name}',
+                price   = i['price']['value'],
+                _yield  = i.get('totalYield', 0),
+                foreign = market.lower() == 'foreign',
+            ))
+        except Exception as e:
+            print(f'Failed to parse security on "{query}"')
+            traceback.print_tb()
+            continue
 
     return securities
 
@@ -259,14 +264,27 @@ def search_fb(query: str):
     return result
 
 
+# TODO: update if contains outdated
+def fetch_from_db(query: str, transliterated_query: str, type: str, market: str, currency: str = None):
+    if transliterated_query is not None:
+        return Security.objects.filter(
+            Q(foreign = market.lower() == 'foreign'),
+            Q(stock = type == 'stock'),
+            Q(ticker__icontains=query) | Q(name__icontains=query) |
+            Q(ticker__icontains=transliterated_query) | Q(name__icontains=transliterated_query))
+    else:
+        return Security.objects.filter(
+            Q(foreign = market.lower() == 'foreign'),
+            Q(stock = type == 'stock'),
+            Q(ticker__icontains=query) | Q(name__icontains=query))
+
+
 def search_securities(query: str, type: str, offset: int = None, limit: int = None,
                       market: str = None, currency: str = None):
     if not query:
         return []
 
     query = query.lower()
-    print(query)
-
     indices = cache.get(market[0] + type[0] + '_' + query)
 
     transliterated_query = None
@@ -279,19 +297,7 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
 
     else:
         if len(query) < 3:
-            # update if contains outdated
-            if transliterated_query is not None:
-                return Security.objects.filter(
-                    Q(foreign = market.lower() == 'foreign'),
-                    Q(stock = type == 'stock'),
-                    Q(ticker__icontains=query) | Q(name__icontains=query) |
-                    Q(ticker__icontains=transliterated_query) | Q(name__icontains=transliterated_query))
-            else:
-                return Security.objects.filter(
-                    Q(foreign = market.lower() == 'foreign'),
-                    Q(stock = type == 'stock'),
-                    Q(ticker__icontains=query) | Q(name__icontains=query))
-
+            return fetch_from_db(query, transliterated_query, type, market)
 
         securities = []
         """
@@ -353,6 +359,8 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
                   or (transliterated_query is not None
                       and (transliterated_query in s.ticker.lower()
                            or transliterated_query in s.name.lower()))]
+    if len(securities) == 0:
+        securities = fetch_from_db(query, transliterated_query, type, market)
 
     # TODO: limits
     cache.set(market[0] + type[0] + '_' + query, tuple([s.id for s in securities]) if securities else tuple())
