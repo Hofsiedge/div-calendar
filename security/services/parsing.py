@@ -264,6 +264,7 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
     if not query:
         return []
 
+    query = query.lower()
     print(query)
 
     indices = cache.get(market[0] + type[0] + '_' + query)
@@ -271,7 +272,7 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
     transliterated_query = None
     if not (set(query) & russian_symbols and set(query) & english_symbols):
         direction = ('ru', 'en') if set(query) & russian_symbols else ('en', 'ru')
-        transliterated_query = transliterator.translit(query.lower(), *direction)
+        transliterated_query = transliterator.translit(query, *direction)
 
     if indices is not None:
         securities = Security.objects.filter(id__in=indices)
@@ -348,7 +349,7 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
         securities = list(present)
 
     securities = [s for s in securities
-                  if query.lower() in s.ticker.lower() or query.lower() in s.name.lower()
+                  if query in s.ticker.lower() or query in s.name.lower()
                   or (transliterated_query is not None
                       and (transliterated_query in s.ticker.lower()
                            or transliterated_query in s.name.lower()))]
