@@ -1,4 +1,4 @@
-import re, requests, locale, aiohttp, asyncio, datetime, string, traceback
+import re, requests, locale, aiohttp, asyncio, datetime, string, sys, traceback
 from bs4 import BeautifulSoup
 from django.core.cache import cache
 from django.db.models import Q
@@ -199,6 +199,7 @@ def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
     )
 
     if r.status_code != 200:
+        print(r.status_code, r.text)
         return None
 
     data = r.json()['payload']['values']
@@ -222,7 +223,7 @@ def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
             ))
         except Exception as e:
             print(f'Failed to parse security on "{query}"')
-            traceback.print_tb()
+            traceback.print_exc(file=sys.stdout)
             continue
 
     return securities
