@@ -268,11 +268,16 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
 
     indices = cache.get(market[0] + type[0] + '_' + query)
 
+    transliterated_query = None
+    if not (set(query) & russian_symbols and set(query) & english_symbols):
+        direction = ('ru', 'en') if set(query) & russian_symbols else ('en', 'ru')
+        transliterated_query = transliterator.translit(query.lower(), *direction)
+
     if indices is not None:
         securities = Security.objects.filter(id__in=indices)
 
     else:
-        if len(query) == 1:
+        if len(query) < 3:
             # update if contains outdated
             return Security.objects.filter(
                 Q(foreign = market.lower() == 'foreign'),
@@ -296,16 +301,12 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
             securities = search_fb(query)
         else:
             securities  = search_tinkoff(query, type, offset, limit, market, currency)
-            """
             if market.lower() == 'russian':
-                if not (set(query) & russian_symbols and set(query) & english_symbols):
-                    direction = ('ru', 'en') if set(query) & russian_symbols else ('en', 'ru')
-                    transliterated_query = transliterator.translit(query, *direction)
+                if transliterated_query is not None:
                     securities_translit = search_tinkoff(transliterated_query,
                             type, offset, limit, market, currency)
                     tickers = {s.ticker for s in securities}
                     securities.extend(filter(lambda s: s.ticker not in tickers, securities_translit))
-            """
 
         # TODO: profile to check that set improves performance
         present = Security.objects.filter(ticker__in=set([s.ticker for s in securities]))
@@ -337,10 +338,7 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
         # by now missing is already included in present (present was not
         # evaluated yet)
         securities = list(present)
-    transliterated_query = None
-    if not (set(query) & russian_symbols and set(query) & english_symbols):
-        direction = ('ru', 'en') if set(query) & russian_symbols else ('en', 'ru')
-        transliterated_query = transliterator.translit(query.lower(), *direction)
+
     securities = [s for s in securities
                   if query.lower() in s.ticker.lower() or query.lower() in s.name.lower()
                   or (transliterated_query is not None
