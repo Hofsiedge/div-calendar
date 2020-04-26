@@ -279,10 +279,18 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
     else:
         if len(query) < 3:
             # update if contains outdated
-            return Security.objects.filter(
-                Q(foreign = market.lower() == 'foreign'),
-                Q(stock = type == 'stock'),
-                Q(ticker__icontains=query) | Q(name__icontains=query))
+            if transliterated_query is not None:
+                return Security.objects.filter(
+                    Q(foreign = market.lower() == 'foreign'),
+                    Q(stock = type == 'stock'),
+                    Q(ticker__icontains=query) | q(name__icontains=query) |
+                    Q(ticker__icontains=transliterated_query) | q(name__icontains=transliterated_query))
+            else
+                return Security.objects.filter(
+                    Q(foreign = market.lower() == 'foreign'),
+                    Q(stock = type == 'stock'),
+                    Q(ticker__icontains=query) | q(name__icontains=query))
+
 
         securities = []
         """
