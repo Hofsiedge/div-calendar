@@ -1,11 +1,16 @@
-import re, requests, locale, aiohttp, asyncio, datetime
+import re, requests, locale, aiohttp, asyncio, datetime, string
 from bs4 import BeautifulSoup
 from django.core.cache import cache
 from django.db.models import Q
 from security.models import Security
-from misc.services import fetch_async
+from misc.services import fetch_async, Transliterator
+
 
 locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+
+transliterator = Transliterator('mappings')
+russian_symbols = frozenset('абвгдеёжзийклмнопрстуфхцчшщыъьэюя')
+english_symbols = frozenset(string.ascii_lowercase)
 
 
 async def fetch_yield_rs(session: aiohttp.ClientSession, ticker: str):
@@ -259,6 +264,8 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
     if not query:
         return []
 
+    print(query)
+
     indices = cache.get(market[0] + type[0] + '_' + query)
 
     if indices is not None:
@@ -289,6 +296,17 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
             securities = search_fb(query)
         else:
             securities  = search_tinkoff(query, type, offset, limit, market, currency)
+            """
+            if market.lower() == 'russian':
+                if not (set(query) & russian_symbols and set(query) & english_symbols):
+                    direction = ('ru', 'en') if set(query) & russian_symbols else ('en', 'ru')
+                    transliterated_query = transliterator.translit(query, *direction)
+                    securities_translit = search_tinkoff(transliterated_query,
+                            type, offset, limit, market, currency)
+                    tickers = {s.ticker for s in securities}
+                    securities.extend(filter(lambda s: s.ticker not in tickers, securities_translit))
+            """
+
         # TODO: profile to check that set improves performance
         present = Security.objects.filter(ticker__in=set([s.ticker for s in securities]))
 
@@ -319,9 +337,15 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
         # by now missing is already included in present (present was not
         # evaluated yet)
         securities = list(present)
-
+    transliterated_query = None
+    if not (set(query) & russian_symbols and set(query) & english_symbols):
+        direction = ('ru', 'en') if set(query) & russian_symbols else ('en', 'ru')
+        transliterated_query = transliterator.translit(query.lower(), *direction)
     securities = [s for s in securities
-                  if query.lower() in s.ticker.lower() or query.lower() in s.name.lower()]
+                  if query.lower() in s.ticker.lower() or query.lower() in s.name.lower()
+                  or (transliterated_query is not None
+                      and (transliterated_query in s.ticker.lower()
+                           or transliterated_query in s.name.lower()))]
 
     # TODO: limits
     cache.set(market[0] + type[0] + '_' + query, tuple([s.id for s in securities]) if securities else tuple())
