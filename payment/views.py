@@ -3,10 +3,11 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from .services import fetch_payments
 from .serializers import PaymentSerializer
-from misc.decorators import cleanup_db_connections
+from misc.decorators import cleanup_db_connections, log_exceptions
 
 date_pattern = re.compile(r'^\d{4}(-\d{2}){2}$')
 
+@log_exceptions
 @cleanup_db_connections
 def get_payments(request):
     if request.method == 'POST':
