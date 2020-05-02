@@ -3,7 +3,9 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from .services import search_posts
 from .serializers import PostSerializer
+from misc.decorators import cleanup_db_connections
 
+@cleanup_db_connections
 def get_posts(request):
     if request.method == 'POST':
         try:

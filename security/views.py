@@ -2,8 +2,10 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from .services import search_securities
 from .serializers import SecuritySerializer
+from misc.decorators import cleanup_db_connections
 
 
+@cleanup_db_connections
 def search_web(request):
     if request.method == 'GET':
         try:

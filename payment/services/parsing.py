@@ -1,4 +1,4 @@
-import datetime, requests, re
+import datetime, requests, re, traceback, sys
 from bs4 import BeautifulSoup
 from security.models import Security
 from ..models import Payment
@@ -152,6 +152,93 @@ def parse_ycharts(security: Security, start: datetime.date, end: datetime.date) 
     return payments
 
 
+def parse_tinkoff(security: Security, start: datetime.date, end: datetime.date) -> list:
+
+    url = f'https://api.tinkoff.ru/trading/bonds/list'
+    r = requests.post(
+        url, json = {
+            'filter':       security.ticker,
+            'country':      'Russian',
+            'sortType':     'ByName',
+            'orderType':    'Asc',
+            'start':        0,
+            'end':          20,
+        }
+    )
+
+    if r.status_code != 200:
+        print(r.status_code, r.text)
+        return None
+
+    data = r.json()['payload']['values']
+    p = re.compile(r'(?<=Номинал: )(?P<nominal>\d+)(?:.*)'
+                    '(?<=Текущий купон \(всего\):)(?: \d+ \()'
+                    '(?P<coupons>\d+)', re.DOTALL)
+
+
+    def get_coupons(nominal: float, coupon: float, coupons: int, period: datetime.timedelta,
+                    start: datetime.date, end: datetime.date, redemption: datetime.date):
+        # Assuming that the last coupon is paid the day before redemption
+        last_coupon     = redemption - datetime.timedelta(1)
+
+        current_date = last_coupon
+        dates = []
+        while current_date >= start:
+            dates.append(current_date)
+            current_date -= period
+
+        payments = [Payment(
+            security=security,
+            date=date,
+            dividends=coupon,
+            forecast=date > datetime.datetime.now().date()
+        ) for date in dates]
+
+        if start <= redemption <= end:
+            payments.append(Payment(
+                security=security,
+                date=end,
+                dividends=nominal,
+                forecast=redemption > datetime.datetime.now().date()
+            ))
+
+        return payments
+
+    coupons = []
+    for i in data:
+        try:
+            symbol = i['symbol']
+            if symbol['ticker'] != security.ticker:
+                continue
+
+            match   = next(p.finditer(symbol['fullDescription'])).groupdict()
+            period  = i['couponPeriodDays']
+            coupon  = i['couponValue']
+            redemption = datetime.datetime.strptime(i['endDate'], '%Y-%m-%dT%H:%M:%SZ').date()
+            floating = i['floatingCoupon']
+
+            # TODO: filter by amortization as well
+            if not floating:
+                coupons.extend(get_coupons(match['nominal'], coupon, match['coupons'],
+                               datetime.timedelta(period), start, end, redemption))
+
+        except StopIteration:
+            print(f"Couldn't obtain payments basis of {security}")
+            continue
+
+        except KeyError as e:
+            if e.args[0] != 'symbol':
+                print(f'Failed to parse some fields ({e.args[0]}...) for {security}')
+            continue
+
+        except Exception as e:
+            print(f'Failed to parse payments on "{security.ticker}"')
+            traceback.print_exc(file=sys.stdout)
+            continue
+
+    return coupons
+
+
 def fetch_payments(tickers: list, start_date: str, end_date: str):
     start   = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
     end     = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
@@ -164,5 +251,7 @@ def fetch_payments(tickers: list, start_date: str, end_date: str):
             data.extend(parse_finanz(security, start, end) or [])
         elif security.foreign and security.stock:
             data.extend(parse_ycharts(security, start, end) or [])
+        else:
+            data.extend(parse_tinkoff(security, start, end) or [])
 
     return data
