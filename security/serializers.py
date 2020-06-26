@@ -15,7 +15,7 @@ class SecuritySerializer(serializers.ModelSerializer):
             '_yield': {'view_name': 'yield'},
         }
 
-    def create(self, validated_data):
+    def create(self, validated_data) -> Security:
         security = Security(
             ticker=validated_data['ticker'],
             isin=validated_data['isin'],
@@ -28,7 +28,7 @@ class SecuritySerializer(serializers.ModelSerializer):
             price=validated_data['price'],
             _yield=validated_data['yield'],
         )
-        message.save()
-        return message
+        security.save()
+        return security
 
 SecuritySerializer._declared_fields['yield'] = serializers.CharField(source='_yield')

@@ -4,7 +4,9 @@ from django.core.cache import cache
 from django.db.models import Q
 from security.models import Security
 from misc.services import fetch_async, Transliterator
-
+from collections import namedtuple, defaultdict
+from typing import List, DefaultDict, Dict, Set, Union, cast, Any, Optional, Tuple
+from dataclasses import dataclass, field
 
 locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 
@@ -180,8 +182,8 @@ def search_rusbonds(query: str, offset: int = None, limit: int = None) -> list:
 
 
 
-def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
-                   market: str = None, currency: str = None) -> list:
+def search_tinkoff(query: str, type: str, offset: Optional[int] = None, limit: Optional[int] = None,
+                   market: Optional[str] = None, currency: Optional[str] = None) -> List[Security]:
     url = f'https://api.tinkoff.ru/trading/{"stocks" if type == "stock" else "bonds"}/list'
     if currency == 'RUB':
         market = 'Russian'
@@ -200,10 +202,10 @@ def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
 
     if r.status_code != 200:
         print(r.status_code, r.text)
-        return None
+        return []
 
     data = r.json()['payload']['values']
-    securities = []
+    securities: List[Security] = []
 
     for i in data:
         try:
@@ -223,10 +225,11 @@ def search_tinkoff(query: str, type: str, offset: int = None, limit: int = None,
             ))
         except Exception as e:
             print(f'Failed to parse security on "{query}"')
-            traceback.print_exc(file=sys.stdout)
+            traceback.print_exc(file=sys.stderr)
             continue
 
     return securities
+
 
 
 def search_fb(query: str):
@@ -266,7 +269,8 @@ def search_fb(query: str):
 
 
 # TODO: update if contains outdated
-def fetch_from_db(query: str, transliterated_query: str, type: str, market: str, currency: str = None):
+def fetch_from_db(query: str, transliterated_query: Optional[str], type: str,
+                  market: str, currency: Optional[str] = None):
     if transliterated_query is not None:
         return Security.objects.filter(
             Q(foreign = market.lower() == 'foreign'),

@@ -5,3 +5,4 @@ delme/
 delme.*
 *.pyc
 *.swp
+*.html
