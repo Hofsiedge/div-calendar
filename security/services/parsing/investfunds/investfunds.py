@@ -1,10 +1,10 @@
 import aiohttp, asyncio, datetime, requests
+from bs4                import BeautifulSoup        # type: ignore[import]
 from collections        import defaultdict
 from dataclasses        import dataclass, field
 from misc.services      import fetch_async
 from security.models    import Security
-from typing             import DefaultDict, Dict, List, Optional, Optional, Tuple, Union
-from bs4                import BeautifulSoup        # type: ignore[import]
+from typing             import Awaitable, DefaultDict, Dict, Iterator, List, Optional, Tuple, Union
 
 # TODO: abstract base class
 class Source:
@@ -85,7 +85,7 @@ class Investfunds(Source):
         for entry in raw_data:
             trading_grounds = [TradingGround(**{
                 'id_numeric': raw_grounds.pop('id.numeric'),    # type: ignore[union-attr]
-                **raw_grounds                                   # type: ignore[arg-type] 
+                **raw_grounds,                                  # type: ignore[arg-type]
             }) for raw_grounds in entry.pop('trading_grounds')] # type: ignore[union-attr]
             data.append(SearchStruct(**{                        # type: ignore[arg-type]
                 'id_numeric':       entry.pop('id.numeric'),
@@ -93,9 +93,10 @@ class Investfunds(Source):
                 **entry,
             }))
 
-        securities: List[Security] = fetch_async(data, Investfunds._construct_security)
+        securities: List[Optional[Security]] = \
+                fetch_async(data, Investfunds._construct_security) #type: ignore[arg-type]
 
-        return securities
+        return [s for s in securities if s]
 
 
     @staticmethod
@@ -106,7 +107,7 @@ class Investfunds(Source):
         for trading_ground in search_struct.trading_grounds:
             urls.append(f'https://investfunds.ru{search_struct.url}{trading_ground.id}/#tab_1')
 
-        data: List[SingleStockFeatures] = filter(
+        data: Iterator[SingleStockFeatures] = filter(
             None,
             [await Investfunds._fetch_single_stock(session, url) for url in urls],
         )
@@ -126,10 +127,8 @@ class Investfunds(Source):
             foreign = values.foreign,
         ) for trading_ground, values in zip(search_struct.trading_grounds, data)]
 
-        if len(securities) == 0:
-            return None
-        # TODO: return all
-        return securities[0]
+        # TODO: return all instead of the first
+        return next(filter(None, securities), None)
 
 
     @staticmethod
@@ -171,8 +170,13 @@ class Investfunds(Source):
             foreign = country.strip() != 'Россия'
 
             # dividends
-            div_rows = soup.find('div', text='Сумма выплаты')\
-                    .findParent('table').find('tbody').find_all('tr')
+            div_rows = []
+            try:
+                div_rows.extend(soup.find('div', text='Сумма выплаты')\
+                        .findParent('table').find('tbody').find_all('tr'))
+            except AttributeError:
+                # TODO: log
+                pass
 
             dividends: List[Dividend] = []
             for tr in div_rows:

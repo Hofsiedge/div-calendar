@@ -1,12 +1,14 @@
 import re, requests, locale, aiohttp, asyncio, datetime, string, sys, traceback
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup       # type: ignore[import]
+from collections import namedtuple, defaultdict
+from dataclasses import dataclass, field
 from django.core.cache import cache
 from django.db.models import Q
-from security.models import Security
 from misc.services import fetch_async, Transliterator
-from collections import namedtuple, defaultdict
-from typing import List, DefaultDict, Dict, Set, Union, cast, Any, Optional, Tuple
-from dataclasses import dataclass, field
+from security.models import Security
+from typing import Any, DefaultDict, Dict, Iterable, List, Optional, Set, Tuple, Union, cast
+
+from .investfunds import Investfunds
 
 locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 
@@ -41,7 +43,7 @@ async def fetch_yield_fs(session: aiohttp.ClientSession, ticker: str):
             return 0
 
 
-async def fetch_yield_price_fb(session: aiohttp.ClientSession, url: str) -> tuple:
+async def fetch_yield_price_fb(session: aiohttp.ClientSession, url: str) -> Tuple:
     async with session.get(url) as r:
         if r.status != 200:
             return None
@@ -284,8 +286,8 @@ def fetch_from_db(query: str, transliterated_query: Optional[str], type: str,
             Q(ticker__icontains=query) | Q(name__icontains=query))
 
 
-def search_securities(query: str, type: str, offset: int = None, limit: int = None,
-                      market: str = None, currency: str = None):
+def search_securities(query: str, type: str, offset: Optional[int] = None, limit: Optional[int] = None,
+                      market: Optional[str] = None, currency: Optional[str] = None) -> Iterable[Security]:
     if not query:
         return []
 
@@ -319,12 +321,19 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
         """
         if type == 'bond' and market.lower() == 'foreign':
             securities = search_fb(query)
-        else:
+        elif type == 'stock':
+            securities  = Investfunds.search(query)
+            if market.lower() == 'russian':
+                securities_translit = Investfunds.search(transliterated_query)
+                tickers = {s.ticker for s in securities}
+                securities.extend(filter(lambda s: s.ticker not in tickers, securities_translit))
+        else:   # russian bonds
             securities  = search_tinkoff(query, type, offset, limit, market, currency)
             if market.lower() == 'russian':
                 if transliterated_query is not None:
                     securities_translit = search_tinkoff(transliterated_query,
                             type, offset, limit, market, currency)
+                    securities_translit = Investfunds.search(transliterated_query)
                     tickers = {s.ticker for s in securities}
                     securities.extend(filter(lambda s: s.ticker not in tickers, securities_translit))
 
@@ -346,12 +355,15 @@ def search_securities(query: str, type: str, offset: int = None, limit: int = No
         if (len(missing) > 0 or outdated.exists()):
             source  = missing + list(outdated)
             if type == 'stock':
+                """
                 yields  = iter(fetch_async(
                     [s.ticker for s in source],
                     fetch_yield_fs if market.lower() == 'foreign' else fetch_yield_rs
                 ))
                 for s in source:
                     s._yield = yields.__next__()
+                """
+                pass
             for s in source:
                 s.save()
 

@@ -1,5 +1,6 @@
 import requests, locale, aiohttp, asyncio
-from typing import List, Any
+from typing import Any, Awaitable, Callable, Dict, Generic, Iterable, List, TypeVar
+from typing_extensions import Protocol
 
 
 def get_rate():
@@ -20,21 +21,31 @@ def get_rate():
     return {'rubToUsd': ru, 'usdToRub': ur}
 
 
-async def async_map(tickers, coroutine, *args, **kwargs):
-    if tickers is None or len(tickers) == 0:
+# TODO: check if T & V are required
+T       = TypeVar('T')
+V       = TypeVar('V')
+InT     = TypeVar('InT',    contravariant=True)
+OutT    = TypeVar('OutT',   covariant=True)
+
+
+class CoroutineFunction(Protocol[InT, OutT]):
+    def __call__(self, session: aiohttp.ClientSession, item: InT, *args: Any, **kwargs: Any) -> OutT: ...
+
+
+async def async_map(items, coroutine: CoroutineFunction[T, Awaitable[V]], *args, **kwargs) -> List[V]:
+    if items is None or len(items) == 0:
         return []
     conn = aiohttp.TCPConnector(limit=20)
     timeout = aiohttp.ClientTimeout(total=7)
     async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
-        futures = [coroutine(session, ticker, *args, **kwargs) for ticker in tickers]
+        futures: List[Awaitable[V]] = [coroutine(session, item, *args, **kwargs) for item in items]
         return await asyncio.gather(*futures)
 
 
-# TODO: generic typing with typevar
-def fetch_async(data, coroutine, *args, **kwargs) -> List[Any]:
+def fetch_async(data: Iterable[T], coroutine: CoroutineFunction[T, Awaitable[V]], *args, **kwargs) -> List[V]:
     loop    = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    result  = loop.run_until_complete(
+    result: List[V]  = loop.run_until_complete(
         async_map(data, coroutine, *args, **kwargs)
     )
     loop.run_until_complete(asyncio.sleep(0))

@@ -1,7 +1,7 @@
 from django.db import models
 from typing import TypeVar
 
-T = TypeVar('T')
+T = TypeVar('T', bound='Security')
 
 class Security(models.Model):
     """ A stock or a bond"""
@@ -25,7 +25,7 @@ class Security(models.Model):
     def get_type(self):
         return 'stock' if self.stock else 'bond'
 
-    def matches_fields(self: T, other: T):
+    def matches_fields(self: T, other: T) -> bool:
         """ returns True if all the fields (except last_update & id) are equal) """
         return self.ticker == other.ticker and self.isin == other.isin\
                 and self.name == other.name and self.logo == other.logo\
